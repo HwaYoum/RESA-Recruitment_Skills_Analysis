@@ -39,7 +39,3 @@ TARGET_EXTRACTION_FIELDS = [
     "우대 사항",
     "복지 및 근무 혜택"
 ]
-
-# OpenAI / LLM 설정
-OPENAI_API_KEY = "sk-your-openai-api-key"
-LLM_MODEL_NAME = "gpt-4.1-nano"

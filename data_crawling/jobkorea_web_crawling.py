@@ -56,7 +56,7 @@ def run_crawler():
     # 결과 요약 출력
     for i, res in enumerate(results, 1):
         print(f"[{i}] {res['title']} ({res['company']})")
-        print(f"    분석결과: {res['analysis']['summary']}")
+        print(f"    분석결과: {res['analysis']}")
 
 if __name__ == "__main__":
     # 출력 인코딩 설정
