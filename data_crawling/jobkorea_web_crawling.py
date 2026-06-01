@@ -4,6 +4,7 @@ import sys
 import os
 import time
 import requests
+import csv
 
 # 현재 디렉토리를 path에 추가하여 모듈 임포트 가능하게 함
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -14,6 +15,21 @@ from data_crawling.logger import setup_logger
 from data_crawling.constants import DEFAULT_HEADERS
 
 logger = setup_logger("main_crawler")
+
+def save_to_csv(data, filename="jobkorea_results.csv"):
+    """데이터 리스트를 CSV 파일에 저장합니다. 파일이 있으면 추가하고, 없으면 헤더와 함께 생성합니다."""
+    if not data:
+        return
+    
+    file_exists = os.path.isfile(filename)
+    keys = data[0].keys()
+    
+    with open(filename, mode='a', encoding='utf-8-sig', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=keys)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerows(data)
+    logger.info(f"💾 {len(data)}개의 데이터를 {filename}에 저장 완료.")
 
 def run_crawler():
     """
@@ -36,19 +52,30 @@ def run_crawler():
     session.headers.update(DEFAULT_HEADERS)
     
     try:
-        for i, item in enumerate(job_list[:5], 1):
+        for i, item in enumerate(job_list, 1):
             detail = scrape_job_detail(item['url'], session=session)
             if detail:
-                results.append({
-                    "title": item['title'],
-                    "url": item['url'],
-                    **detail
-                })
+                for res in detail:
+                    results.append({
+                        # 'id': item['id'],
+                        "title": item['title'],
+                        "url": item['url'],
+                        "categorys": item['categorys'],
+                        **res
+                    })
+                    
+                    # 10개가 쌓일 때마다 저장
+                    if len(results) % 10 == 0:
+                        save_to_csv(results[-10:])
             
-            # 요청 간 1초 지연 (서버 부하 방지 및 연결 안정성 확보)
-            if i < len(job_list[:5]):
+            # 요청 간 1초 지연
+            if i < len(job_list):
                 time.sleep(1)
     finally:
+        # 남아있는 데이터 저장
+        remaining_count = len(results) % 10
+        if remaining_count > 0:
+            save_to_csv(results[-remaining_count:])
         session.close()
 
     logger.info(f"=== 크롤링 프로세스 종료. 총 {len(results)}개 데이터 처리 완료 ===")
@@ -56,7 +83,7 @@ def run_crawler():
     # 결과 요약 출력
     for i, res in enumerate(results, 1):
         print(f"[{i}] {res['title']} ({res['company']})")
-        print(f"    분석결과: {res['analysis']}")
+        print(f"    분석결과: {res['division']}") # analysis -> division으로 수정 (실제 데이터 필드에 맞춤)
 
 if __name__ == "__main__":
     # 출력 인코딩 설정
