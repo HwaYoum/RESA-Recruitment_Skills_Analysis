@@ -42,28 +42,36 @@ def collect_job_urls():
                 "profile": SEARCH_CONDITIONS.get('profile', "0")
             }
 
-            response = session.post(REQUEST_URL, data=payload, headers=DEFAULT_HEADERS)
-            
-            if response.status_code != 200:
-                logger.error(f"직무 [{duty_code}] 요청 실패. 상태 코드: {response.status_code}")
-                continue
-
-            soup = BeautifulSoup(response.text, 'html.parser')
-            job_elements = soup.select('td.tplTit div.titBx strong a.link')
-            
-            for element in job_elements:
-                title = element.get_text(strip=True)
-                relative_url = element.get('href')
-                full_url = urljoin(BASE_URL, relative_url)
+            duty_cnt = 0
+            for p in range(1,100):
+                payload["page"] = p
+                response = session.post(REQUEST_URL, data=payload, headers=DEFAULT_HEADERS)
                 
-                # 중복 수집 방지
-                if not any(item['url'] == full_url for item in all_collected_data):
-                    all_collected_data.append({
-                        "title": title,
-                        "url": full_url
-                    })
-            
-            logger.info(f"직무 [{duty_code}]: {len(job_elements)}개 URL 수집됨")
+                if response.status_code != 200:
+                    logger.error(f"직무 [{duty_code}] 요청 실패. 상태 코드: {response.status_code}")
+                    continue
+
+                soup = BeautifulSoup(response.text, 'html.parser')
+                job_elements = soup.select('td.tplTit div.titBx strong a.link')
+                
+                if not len(job_elements):
+                    break
+                duty_cnt += len(job_elements)
+
+                for element in job_elements:
+                    title = element.get_text(strip=True)
+                    relative_url = element.get('href')
+                    full_url = urljoin(BASE_URL, relative_url)
+                    
+                    # 중복 수집 방지
+                    if not any(item['url'] == full_url for item in all_collected_data):
+                        all_collected_data.append({
+                            "title": title,
+                            "url": full_url
+                        })
+                
+            logger.info(f"직무 [{duty_code}]: {duty_cnt}개 URL 수집됨")
+            logger.info(f"현재 유니크 직무 개수: {len(all_collected_data)})")
             
         logger.info(f"전체 총 {len(all_collected_data)}개의 유니크한 공고 URL 수집 완료")
         return all_collected_data
