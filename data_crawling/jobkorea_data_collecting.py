@@ -9,22 +9,24 @@ import os
 import base64
 import json
 import re
+import time
+from PIL import Image
 from openai import OpenAI
-from dotenv import load_dotenv
-from data_crawling.constants import DEFAULT_HEADERS, BASE_URL, TARGET_EXTRACTION_FIELDS
+from dotenv import load_dotenv, dotenv_values, find_dotenv
+from data_crawling.constants import DEFAULT_HEADERS, BASE_URL, TARGET_EXTRACTION_FIELDS, USER_PROMPT_FOR_TEXT,USER_PROMPT_FOR_IMAGE, SYSTEM_PROMPT
 from data_crawling.logger import setup_logger
 
 # 환경 변수 로드
-load_dotenv()
+config = dotenv_values(dotenv_path=find_dotenv())
 
 logger = setup_logger("data_collecting")
 
 # OpenAI 클라이언트 초기화
 client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"),
-    base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    api_key=config.get("OPENAI_API_KEY"),
+    base_url=config.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 )
-MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4.1-nano")
+MODEL_NAME = config.get("OPENAI_MODEL_NAME", "gpt-4o-mini")
 
 def get_iframe_url(job_url, session):
     """채용공고 상세 페이지에서 실제 데이터가 담긴 iframe URL을 추출합니다."""
@@ -81,35 +83,60 @@ def analyze_image_with_llm(img_url, session):
     try:
         logger.info(f"📷 이미지 공고 감지. 멀티모달 LLM 분석 시작: {img_url}")
         response = session.get(img_url, headers=DEFAULT_HEADERS)
-        image_content = response.content
-        base64_image = base64.b64encode(image_content).decode('utf-8')
-
-        prompt = f"""
-        당신은 채용 공고 분석 전문가입니다. 주어진 채용 공고 이미지에서 다음 항목들을 추출하여 JSON 형식으로 응답해주세요.
         
-        JSON의 키는 반드시 다음 항목 명칭과 정확히 일치해야 합니다:
-        {', '.join(TARGET_EXTRACTION_FIELDS)}
+        # PIL 이미지로 변환
+        image = Image.open(io.BytesIO(response.content))
+        width, height = image.size
         
-        응답은 반드시 순수 JSON 형태여야 하며, 추가적인 설명은 생략하세요.
-        """
+        # 이미지 분할 처리 (세로 1024px 단위)
+        max_height = 1024
+        image_content_list = [{"type": "text", "text": "This is the job description image to be analyzed. It has been split into multiple parts if it was too long."}]
+        
+        if height > max_height:
+            logger.info(f"📏 이미지 세로 길이({height}px)가 {max_height}px를 초과하여 분할을 시작합니다.")
+            for i in range(0, height, max_height):
+                box = (0, i, width, min(i + max_height, height))
+                cropped_img = image.crop(box)
+                
+                # 메모리에 임시 저장 후 base64 인코딩
+                img_byte_arr = io.BytesIO()
+                # 원본 포맷을 최대한 유지하되, RGBA 등은 JPEG 저장 시 문제될 수 있으므로 RGB 변환 고려
+                if cropped_img.mode in ("RGBA", "P"):
+                    cropped_img = cropped_img.convert("RGB")
+                cropped_img.save(img_byte_arr, format='JPEG')
+                base64_image = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
+                
+                image_content_list.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_image}",
+                        "detail":"high" 
+                    }
+                })
+        else:
+            # 분할이 필요 없는 경우
+            content_type = response.headers.get('Content-Type', 'image/jpeg')
+            base64_image = base64.b64encode(response.content).decode('utf-8')
+            image_content_list.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/{content_type.split('/')[-1]};base64,{base64_image}",
+                    "detail":"high" 
+                }
+            })
 
         completion = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            },
-                        },
-                    ],
-                }
+                    "content": image_content_list,
+                },
+                {"role": "user", "content":  USER_PROMPT_FOR_IMAGE.format(TARGET_EXTRACTION_FIELDS = TARGET_EXTRACTION_FIELDS)},
             ],
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
+            temperature=0.0
         )
         
         result = json.loads(completion.choices[0].message.content)
@@ -142,9 +169,9 @@ def parse_job_content(iframe_url, session):
 
         # 1. 이미지 공고인지 확인 (본문 영역 내 큰 이미지가 있는지)
         img_tag = content_area.select_one('img')
-        logger.info(f"content_area text 길이: {len(content_area.get_text(strip=True))}")
+        
         # 이미지 태그가 존재하고, 텍스트 길이가 매우 짧은 경우 통이미지로 간주
-        if img_tag and len(content_area.get_text(strip=True)) < 100:
+        if img_tag and len(content_area.get_text(strip=True)) < 400:
             img_url = img_tag['src']
             if img_url.startswith('//'):
                 img_url = "https:" + img_url
@@ -202,18 +229,23 @@ def scrape_job_detail(url, session=None):
             logger.warning("iframe을 찾을 수 없습니다. 메인 페이지 본문 시도.")
             content_area = soup.select_one('div.job-detail-content')
             raw_content = content_area.get_text() if content_area else "본문 없음"
-            raw_content_length = len(raw_content)
+            # raw_content_length = len(raw_content)
             analysis_result = analyze_with_llm(raw_content)
         
-        data = {
-            "company": company_name.get_text(strip=True) if company_name else "정보 없음",
-            "content_type": content_type,
-            "raw_content_length": raw_content_length,
-            "analysis": analysis_result
-        }
+        output = []
+        for res in analysis_result["recruitment_list"]:
+            data = {
+                "company": company_name.get_text(strip=True) if company_name else "정보 없음",
+                "content_type": content_type,
+                "division": res["모집부문"],
+                "career": res["경력구분"],
+                "requirements": res['자격요건'],
+                "preferred": res["우대사항"]
+            }
+            output.append(data)
         
-        logger.info(f"데이터 수집 완료: {data['company']}")
-        return data
+        logger.info(f"데이터 수집 완료: {data['company']} {len(analysis_result["recruitment_list"])}건")
+        return output
 
     except Exception as e:
         logger.exception(f"데이터 수집 중 오류 발생 ({url}): {e}")
@@ -225,26 +257,15 @@ def analyze_with_llm(text):
     """
     try:
         logger.info("🤖 텍스트 기반 LLM 분석 시작.")
-        
-        prompt = f"""
-        당신은 채용 공고 분석 전문가입니다. 다음 채용 공고 텍스트에서 주요 정보를 추출하여 JSON 형식으로 응답해주세요.
-        
-        JSON의 키는 반드시 다음 항목 명칭과 정확히 일치해야 합니다:
-        {', '.join(TARGET_EXTRACTION_FIELDS)}
-        
-        [채용 공고 텍스트]
-        {text}
-        
-        응답은 반드시 순수 JSON 형태여야 하며, 추가적인 설명은 생략하세요.
-        """
 
         completion = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": "당신은 채용 공고 분석 전문가입니다."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": USER_PROMPT_FOR_TEXT.format(TARGET_EXTRACTION_FIELDS = TARGET_EXTRACTION_FIELDS, JOB_DESCRIPTION = text)}
             ],
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
+            temperature=0.0
         )
         
         result = json.loads(completion.choices[0].message.content)
@@ -254,11 +275,13 @@ def analyze_with_llm(text):
         return {field: "분석 실패" for field in TARGET_EXTRACTION_FIELDS}
 
 if __name__ == "__main__":
+    start_time = time.time()
     import sys
     if sys.stdout.encoding != 'utf-8':
         sys.stdout.reconfigure(encoding='utf-8')
         
     test_url = "https://www.jobkorea.co.kr/Recruit/GI_Read/49231627?rPageCode=SL&logpath=21&sn=6&sc=612"
+    test_url = "https://www.jobkorea.co.kr/Recruit/GI_Read/49273256?rPageCode=SL&logpath=21&sn=6&sc=612" #이미지 분석 테스트용
     print(f"--- 상세 데이터 수집 단위 테스트 시작 ({test_url}) ---")
     
     session = requests.Session()
@@ -267,6 +290,11 @@ if __name__ == "__main__":
     print("\n=== 최종 수집 결과 ===")
     if result:
         import json
-        print(json.dumps(result, indent=4, ensure_ascii=False))
+        for r in result:
+            print(json.dumps(r, indent=4, ensure_ascii=False))
     else:
         print("수집 실패")
+    
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"총 소요 시간: {elapsed_time:.4f}초")

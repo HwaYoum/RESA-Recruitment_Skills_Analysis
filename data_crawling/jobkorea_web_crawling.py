@@ -39,11 +39,14 @@ def run_crawler():
         for i, item in enumerate(job_list[:5], 1):
             detail = scrape_job_detail(item['url'], session=session)
             if detail:
-                results.append({
-                    "title": item['title'],
-                    "url": item['url'],
-                    **detail
-                })
+                for res in detail:
+                    results.append({
+                        'id': item['id'],
+                        "title": item['title'],
+                        "url": item['url'],
+                        "categorys": item['categorys'],
+                        **res
+                    })
             
             # 요청 간 1초 지연 (서버 부하 방지 및 연결 안정성 확보)
             if i < len(job_list[:5]):
