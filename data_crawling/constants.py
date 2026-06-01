@@ -13,7 +13,8 @@ DEFAULT_HEADERS = {
 # 검색 조건 설정
 SEARCH_CONDITIONS = {
     "isDefault": "true",
-    "duty": [str(i) for i in range(1000229,1000254+1) ],    # 프론트엔드개발자 (리스트로 관리)
+    # "duty": [str(i) for i in range(1000229,1000254+1) ],
+    "duty": 1000229,
     "career": "1",          # 신입
     "page": "100",
     "pagesize": "40",
