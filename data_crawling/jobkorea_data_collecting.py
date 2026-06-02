@@ -224,7 +224,12 @@ def scrape_job_detail(url, session=None):
                 analysis_result = analyze_with_llm(content_data)
             else:
                 logger.warning(f"콘텐츠 처리 실패: {content_data}")
-                analysis_result = {field: "데이터 없음" for field in TARGET_EXTRACTION_FIELDS}
+                analysis_result = { analysis_result: [{
+                    "division": "채용본문오류 / 문제확인바람",
+                    "career": "채용본문오류 / 문제확인바람",
+                    "requirements": "채용본문오류 / 문제확인바람",
+                    "preferred": "채용본문오류 / 문제확인바람",
+                }]}
         else:
             logger.warning("iframe을 찾을 수 없습니다. 메인 페이지 본문 시도.")
             content_area = soup.select_one('div.job-detail-content')
