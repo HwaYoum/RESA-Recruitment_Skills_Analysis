@@ -143,7 +143,12 @@ def analyze_image_with_llm(img_url, session):
         return result
     except Exception as e:
         logger.error(f"이미지 LLM 분석 중 오류 발생: {e}")
-        return {field: "분석 실패" for field in TARGET_EXTRACTION_FIELDS}
+        return {"recruitment_list": [{
+                    "모집부문": "채용본문오류 / 문제확인바람",
+                    "경력구분": "채용본문오류 / 문제확인바람",
+                    "자격요건": "채용본문오류 / 문제확인바람",
+                    "우대사항": "채용본문오류 / 문제확인바람",
+                }]}
 
 def extract_text_from_html(html_content):
     """HTML 구조를 html2text를 이용해 텍스트로 변환합니다."""
@@ -225,10 +230,10 @@ def scrape_job_detail(url, session=None):
             else:
                 logger.warning(f"콘텐츠 처리 실패: {content_data}")
                 analysis_result = {"recruitment_list": [{
-                    "division": "채용본문오류 / 문제확인바람",
-                    "career": "채용본문오류 / 문제확인바람",
-                    "requirements": "채용본문오류 / 문제확인바람",
-                    "preferred": "채용본문오류 / 문제확인바람",
+                    "모집부문": "채용본문오류 / 문제확인바람",
+                    "경력구분": "채용본문오류 / 문제확인바람",
+                    "자격요건": "채용본문오류 / 문제확인바람",
+                    "우대사항": "채용본문오류 / 문제확인바람",
                 }]}
         else:
             logger.warning("iframe을 찾을 수 없습니다. 메인 페이지 본문 시도.")
@@ -277,7 +282,12 @@ def analyze_with_llm(text):
         return result
     except Exception as e:
         logger.error(f"텍스트 LLM 분석 중 오류 발생: {e}")
-        return {field: "분석 실패" for field in TARGET_EXTRACTION_FIELDS}
+        return {"recruitment_list": [{
+                    "모집부문": "채용본문오류 / 문제확인바람",
+                    "경력구분": "채용본문오류 / 문제확인바람",
+                    "자격요건": "채용본문오류 / 문제확인바람",
+                    "우대사항": "채용본문오류 / 문제확인바람",
+                }]}
 
 if __name__ == "__main__":
     start_time = time.time()
