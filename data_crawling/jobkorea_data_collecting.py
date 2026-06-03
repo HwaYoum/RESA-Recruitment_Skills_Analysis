@@ -152,7 +152,7 @@ def extract_text_from_html(html_content):
     h.ignore_links = True
     h.ignore_images = True
     h.body_width = 0 
-    
+
     return h.handle(html_content)
 
 def parse_job_content(iframe_url, session):
@@ -162,8 +162,8 @@ def parse_job_content(iframe_url, session):
         soup = BeautifulSoup(response.text, 'html.parser')
         
         # 잡코리아 채용 본문 영역 확인
-        content_area = soup.select_one('div.secDetailWrap') or soup.select_one('div.detailReadImg')
-        
+        content_area = soup.select_one('div.secDetailWrap') or soup.select_one('div.detailReadImg') or soup.select_one('div.section-content')
+
         if not content_area:
             return "error", "본문 영역을 찾을 수 없습니다."
 
@@ -171,7 +171,7 @@ def parse_job_content(iframe_url, session):
         img_tag = content_area.select_one('img')
         
         # 이미지 태그가 존재하고, 텍스트 길이가 매우 짧은 경우 통이미지로 간주
-        if img_tag and len(content_area.get_text(strip=True)) < 400:
+        if img_tag and len(content_area.get_text(strip=True)) < 200:
             img_url = img_tag['src']
             if img_url.startswith('//'):
                 img_url = "https:" + img_url
@@ -224,7 +224,7 @@ def scrape_job_detail(url, session=None):
                 analysis_result = analyze_with_llm(content_data)
             else:
                 logger.warning(f"콘텐츠 처리 실패: {content_data}")
-                analysis_result = { analysis_result: [{
+                analysis_result = {"recruitment_list": [{
                     "division": "채용본문오류 / 문제확인바람",
                     "career": "채용본문오류 / 문제확인바람",
                     "requirements": "채용본문오류 / 문제확인바람",
@@ -286,6 +286,7 @@ if __name__ == "__main__":
         sys.stdout.reconfigure(encoding='utf-8')
         
     test_url = "https://www.jobkorea.co.kr/Recruit/GI_Read/49231627?rPageCode=SL&logpath=21&sn=6&sc=612"
+    test_url = "https://www.jobkorea.co.kr/Recruit/GI_Read/49284240?rPageCode=SL&logpath=21&sn=6&sc=611" # 채용분문 html이 다른 경우 테스트
     test_url = "https://www.jobkorea.co.kr/Recruit/GI_Read/49273256?rPageCode=SL&logpath=21&sn=6&sc=612" #이미지 분석 테스트용
     print(f"--- 상세 데이터 수집 단위 테스트 시작 ({test_url}) ---")
     
