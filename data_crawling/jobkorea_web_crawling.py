@@ -6,7 +6,6 @@ import time
 import requests
 import csv
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 # 현재 디렉토리를 path에 추가하여 모듈 임포트 가능하게 함
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -64,7 +63,7 @@ def run_crawler():
                         "url": item['url'],
                         "categorys": item['categorys'],
                         **res,
-                        "crawl_start_time": datetime.now(ZoneInfo('Asia/Seoul')).strftime('%Y-%m-%d %H:%M:%S')
+                        "crawl_time":datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     })
                     
                     # 10개가 쌓일 때마다 저장
