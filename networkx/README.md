@@ -1,3 +1,4 @@
+~~~
 /
 ├── 00_input_data/           # 분석의 기초가 되는 전처리된 채용 공고 데이터
 ├── 01_preprocessing/        # 데이터 정제 및 동시 출현 빈도 산출
@@ -9,7 +10,7 @@
 └── 03_visualization/        # 최종 결과 시각화
     ├── scripts/             # 그래프 생성 및 키워드 탐색 코드
     └── figures/             # 최종 네트워크 그래프 이미지 (.png)
-
+~~~
 pip install pandas networkx matplotlib scipy
 
 1. 데이터 전처리: 01_preprocessing/ 코드를 실행하여 기초 행렬 생성
